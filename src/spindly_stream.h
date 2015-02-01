@@ -73,7 +73,7 @@ typedef struct
 	spdy_zlib_context *zlib_ctx_out;
 	/** Stream data: **/
 	uint32_t wndw_received_length;
-	uint32_t wndw_sent_length;
+	uint32_t wndw_remaining_size;
 	/** Temporary data: */
 	spdy_frame *active_frame;
 } spdy_stream;

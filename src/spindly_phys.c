@@ -194,9 +194,10 @@ spindly_error_t spindly_phys_incoming(struct spindly_phys *phys,
 		return SPINDLYE_NOMEM;
 
 	SPDYDEBUG("IN Length = %d\n", datalen);
-	SPDYDEBUG("[%d][%d][%d][%d][%d][%d][%d][%d][%d][%d][%d][%d]",
-		data[0], data[1],data[2], data[3], data[4], data[5], data[5], data[7],
-		data[8], data[9],data[10], data[11]);
+	SPDYDEBUG("[%d][%d][%d][%d][%d][%d][%d][%d][%d][%d][%d][%d]"
+	"[%d][%d][%d][%d]", data[0], data[1],data[2], data[3], data[4],
+	data[5], data[6], data[7], data[8], data[9],data[10], data[11],
+	data[12], data[13], data[14], data[15], data[16]);
 
 	in->identifier = identifier;
 	if (flags & SPINDLY_INCOMING_COPY) {
@@ -245,9 +246,23 @@ static int parse_append(struct spindly_phys *phys, bool *more)
 	struct list_node *next = _spindly_list_next(n);
 	needed=data->needed;
 	SPDYDEBUG("parse len=%d, copylen=%d, needed=%d",phys->parselen, copylen, needed);
+	//LOADER team
+	//begin ISSUE2(WEB-7386): boundary case, when data->cursor reaches data->end, there is no more data to copy from current node of phys->InQueue
+	//and next node is also NULL, remove current node and skip parse_append
+	if(copylen == 0 && next == NULL) {
+		*more=false;
+		remove_inqnode(phys, (struct spindly_indata *)n);
+		SPDYDEBUG("Skip parse append: copylen is %d needed=%d but there is No next phys->inq", copylen, needed);
+		return SPINDLYE_OK;
+	}
+	//end
 	if (!phys->parselen)
 		phys->parselen = needed+copylen;
 	if (phys->parsealloc < needed+copylen) {
+		//LOADER team
+		//begin ISSUE1(WEB-7429): memory(buffer) corruption due to realloc
+		phys->parse = NULL;
+		//end
 		char *newp = realloc(phys->parse, needed+copylen);
 		if (!newp)
 			return SPINDLYE_NOMEM;
@@ -265,6 +280,10 @@ static int parse_append(struct spindly_phys *phys, bool *more)
 			memcpy(&phys->parse[copylen], in->data, in->datalen);
 			needed-=in->datalen;
 			copied+=in->datalen;
+			//LOADER team
+			//begin ISSUE1(WEB-7429): if loop is executed again and if we dont update copylen, it overwrites the existing buffer
+			copylen = copied;
+			//end
 			struct list_node *next = _spindly_list_next(n);
 			remove_inqnode(phys, (struct spindly_indata *)n);
 			n=next;
@@ -381,8 +400,15 @@ spindly_error_t spindly_phys_demux(struct spindly_phys *phys,
 				(phys->data.error != SPDY_ERROR_INSUFFICIENT_DATA))) {
 			/* if the previously stored data is all consumed and if there is error in parsing
 			then get the current queue data */
+			//Loader Team
+			//begin Issue2(WEB-7386): For case data left 8, data->cursor = data->end and it parsed control frame or data frame header successfully, because of only 8 bytes left
+			//and it returned INSUFFICIENT_DATA, For next incoming data, here it is forced to _header_parsed to 0, we should retain status of _header_parsed if error is INSUFFICIENT.
+			SPDYDEBUG("Frame type  %s error %d\n",
+					spdy_control_frame_get_type_name(phys->frame.frame.control.type), phys->data.error);
+			if(phys->data.error != SPDY_ERROR_INSUFFICIENT_DATA)
+				phys->frame._header_parsed =0;
 			spdy_data_use(&phys->data, in->data, in->datalen);
-			phys->frame._header_parsed =0;
+			//end
 		}
 
 		/*
@@ -548,6 +574,8 @@ spindly_error_t spindly_phys_demux(struct spindly_phys *phys,
 						break;
 					}
 
+					int old_max_window_size = 0;
+					int diff = 0;
 					for (i = 0; i < iv_block->count; i++) {
 						ptr->msg.settings.pairs[i].id = iv_block->pairs[i].id;
 						ptr->msg.settings.pairs[i].value = iv_block->pairs[i].value;
@@ -618,9 +646,12 @@ spindly_error_t spindly_phys_demux(struct spindly_phys *phys,
 									phys, wnd->stream_id);
 							break;
 						}
-						stream->spdy.wndw_sent_length -= wnd->size;
-						ptr->msg.wnd.remainaing_size = phys->max_window_size -
-							stream->spdy.wndw_sent_length;
+						SPDYDEBUG("++++ 1 %p::#%d Wndw remaining size: [%u], Wndw size: [%u]",
+									phys, wnd->stream_id, stream->spdy.wndw_remaining_size, wnd->size);
+						stream->spdy.wndw_remaining_size += wnd->size;
+						ptr->msg.wnd.remainaing_size = stream->spdy.wndw_remaining_size;
+						SPDYDEBUG("++++ 2 %p::#%d Wndw remaining size: [%u], Wndw size: [%u]",
+									phys, wnd->stream_id, stream->spdy.wndw_remaining_size, wnd->size);
 					}
 					break;
 				default:

@@ -219,6 +219,8 @@ spindly_error_t _spindly_stream_init(struct spindly_phys *phys,
 	// Set FLAG_FIN if it is.
 	s->spdy.fin_sent = (SPINDLY_DATA_FLAGS_FIN == flags) ? true : false;
 
+	s->spdy.wndw_remaining_size = phys->max_window_size;
+
 	/* append this stream to the list of streams held by the phys handle */
 	//_spindly_phys_add_stream(phys, s);
 
@@ -556,17 +558,24 @@ spindly_error_t spindly_stream_data(struct spindly_stream *s,
 		been received from the peer. TODO: check that it came from the peer */
 		return SPINDLYE_INVAL;
 
-	SPDYDEBUG("window send len before %d", s->spdy.wndw_sent_length);
-	if(s->phys->max_window_size < s->spdy.wndw_sent_length+len)
+	SPDYDEBUG("1 [%u]: window remaining size %u, Flags [%d]", s->streamid,
+                s->spdy.wndw_remaining_size, flags);
+	/* We can't send data more than WINDOW SIZE! */
+	if(len > s->spdy.wndw_remaining_size) {
+		SPDYDEBUG("Returning! WAIT FOR WINDOW UPDATE from Rcvr...");
 		return SPINDLYE_WAIT_FOR_UPDATE;
+	}
 
 	/* queue up a data message */
 	rc = spdy_mk_data_stream(&data_frame, s->streamid, flags, data, len);
 
-	s->spdy.wndw_sent_length += len;
-	SPDYDEBUG("window send len %d", s->spdy.wndw_sent_length);
-	if (rc)
+	s->spdy.wndw_remaining_size -= len;
+	SPDYDEBUG("2 [%u]: window remaining size %u", s->streamid,
+                s->spdy.wndw_remaining_size);
+	if (rc) {
+		SPDYDEBUG("Error: spdy_mk_data_stream() failed. rc: [%d]", rc);
 		goto fail;
+	}
 
 	/* get an out buffer TODO: what if drained? */
 	od = _spindly_list_first(&s->phys->pendq);
@@ -581,8 +590,10 @@ spindly_error_t spindly_stream_data(struct spindly_stream *s,
 	/* pack a data frame to the output buffer */
 	rc = spdy_data_frame_pack_header(&od->buffer,
 	                             &od->len, &data_frame);
-	if (rc)
+	if (rc) {
+		SPDYDEBUG("Error: spdy_data_frame_pack_header() failed. rc: [%d]", rc);
 		goto fail;
+	}
 
 	SPDYDEBUG("data Length = %d\n", od->len);
 	//for(i=0;i<2;i++)

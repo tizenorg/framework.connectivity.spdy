@@ -1,6 +1,6 @@
 Name:       spindly
 Summary:    SPDY Protocol Library
-Version:    0.0.7
+Version:    0.0.9
 Release:    1
 Group:      TO_BE/FILLED_IN
 License:    TO BE FILLED IN
@@ -17,6 +17,7 @@ Requires(postun): /sbin/ldconfig
 
 %description
 SPDY Protocol libraryXB-Public-Package: no
+
 
 %package devel
 Summary:    Development files for %{name}

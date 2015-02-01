@@ -84,6 +84,7 @@ int spdy_wndup_pack(struct spindly_phys* phys, unsigned char **out,
 int spdy_wndup_parse(spdy_wndup *wndup, spdy_data *data,
                           size_t data_length, uint16_t version)
 {
+	int s = 0;
 	if(data_length != SPDY3_WNDUP_LENGTH) {
 		SPDYDEBUG("Not enough data for parsing the header.");
 		return SPDY_ERROR_INSUFFICIENT_DATA;
@@ -95,11 +96,13 @@ int spdy_wndup_parse(spdy_wndup *wndup, spdy_data *data,
 	/* Read the status code. */
 	data->cursor+=4;
 	if (version == SPINDLY_SPDYVER3) {
-		wndup->size = BE_LOAD_32(data->cursor);
+		wndup->size = BE_LOAD_32(data->cursor) & 0x7FFFFFFF;
+		s = BE_LOAD_32(data->cursor);
 		data->cursor+=4;
 	}
-	SPDYDEBUG("status %d stream %d version %d\n",
+	SPDYDEBUG("status %d [Old: %d] stream %d version %d\n",
 					wndup->size,
+					s,
 					wndup->stream_id,
 					version);
 
