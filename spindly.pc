@@ -1,0 +1,13 @@
+# Package Information for pkg-config
+
+prefix=@PREFIX@
+exec_prefix=@EXEC_PREFIX@
+libdir=@LIBDIR@
+includedir=/usr/include/spindly
+
+Name: spindly 
+Description: SPDY Protocol Library
+Version: @VERSION@
+Requires: zlib check
+Libs: -L${libdir} -lspdy
+Cflags: -I${includedir}
