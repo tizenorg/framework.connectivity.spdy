@@ -1,6 +1,6 @@
 Name:       spindly
 Summary:    SPDY Protocol Library
-Version:    0.0.9
+Version:    0.0.10
 Release:    1
 Group:      TO_BE/FILLED_IN
 License:    BSD-2.0
